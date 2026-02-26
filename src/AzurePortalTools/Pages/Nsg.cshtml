@@ -1,0 +1,144 @@
+@page
+@model AzurePortalTools.Pages.NsgModel
+@{
+    ViewData["Title"] = "NSG Rules";
+}
+
+<h2 class="mb-1">&#128737; NSG Rules Manager</h2>
+<p class="text-secondary mb-4">Tenant: <strong class="text-info">@Model.SelectedTenant?.DisplayName</strong></p>
+
+@if (!string.IsNullOrEmpty(Model.Message))
+{
+    <div class="alert @Model.MessageClass alert-dismissible fade show" role="alert">
+        @Model.Message
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Selettori Resource Group e NSG -->
+<form method="get" class="row g-2 mb-4 align-items-end">
+    <input type="hidden" name="tenantId" value="@Model.TenantId" />
+    <div class="col-auto">
+        <label class="form-label text-secondary small">Resource Group</label>
+        <select name="resourceGroup" class="form-select bg-dark text-light border-secondary" onchange="this.form.submit()">
+            <option value="">-- Resource Group --</option>
+            @foreach (var rg in Model.ResourceGroups)
+            {
+                @if (rg == Model.ResourceGroup)
+                {
+                    <option value="@rg" selected>@rg</option>
+                }
+                else
+                {
+                    <option value="@rg">@rg</option>
+                }
+            }
+        </select>
+    </div>
+    @if (Model.Nsgs.Any())
+    {
+        <div class="col-auto">
+            <label class="form-label text-secondary small">NSG</label>
+            <select name="nsgName" class="form-select bg-dark text-light border-secondary" onchange="this.form.submit()">
+                <option value="">-- Seleziona NSG --</option>
+                @foreach (var nsg in Model.Nsgs)
+                {
+                    @if (nsg == Model.NsgName)
+                    {
+                        <option value="@nsg" selected>@nsg</option>
+                    }
+                    else
+                    {
+                        <option value="@nsg">@nsg</option>
+                    }
+                }
+            </select>
+        </div>
+    }
+    <div class="col-auto">
+        <a href="/Index" class="btn btn-outline-secondary">&#8592; Torna ai Tenant</a>
+    </div>
+</form>
+
+@if (!string.IsNullOrEmpty(Model.NsgName))
+{
+    <!-- Form aggiunta regola -->
+    <div class="card bg-dark border-secondary mb-4">
+        <div class="card-header border-secondary">
+            <h6 class="mb-0 text-warning">&#43; Aggiungi / Aggiorna Regola Inbound</h6>
+        </div>
+        <div class="card-body">
+            <form method="post" asp-page-handler="AddRule" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="tenantId" value="@Model.TenantId" />
+                <input type="hidden" name="resourceGroup" value="@Model.ResourceGroup" />
+                <input type="hidden" name="nsgName" value="@Model.NsgName" />
+                <div class="col-md-4">
+                    <label class="form-label text-secondary">IP Sorgente</label>
+                    <div class="input-group">
+                        <input type="text" name="SourceIp" class="form-control bg-dark text-light border-secondary"
+                               placeholder="es. 1.2.3.4" value="@Model.PublicIp" required />
+                        <span class="input-group-text bg-secondary text-light border-secondary" title="Tuo IP pubblico rilevato">
+                            &#127760;
+                        </span>
+                    </div>
+                    <div class="form-text text-secondary">IP pubblico rilevato: <strong class="text-info">@Model.PublicIp</strong></div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label text-secondary">Protocollo</label>
+                    <select name="Protocol" class="form-select bg-dark text-light border-secondary">
+                        <option value="RDP">RDP (porta 3389)</option>
+                        <option value="MSSQL">MS SQL (porta 1433)</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-warning">
+                        &#128737; Applica Regola
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabella regole esistenti -->
+    <h5 class="text-light mb-3">Regole esistenti in <strong class="text-info">@Model.NsgName</strong></h5>
+    @if (Model.Rules.Any())
+    {
+        <div class="table-responsive">
+            <table class="table table-dark table-sm table-hover align-middle">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>Nome</th>
+                        <th>Priorità</th>
+                        <th>Direzione</th>
+                        <th>Accesso</th>
+                        <th>Protocollo</th>
+                        <th>Porta Dest.</th>
+                        <th>IP Sorgenti</th>
+                        <th>Descrizione</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var rule in Model.Rules)
+                    {
+                        var accessClass = rule.Access == "Allow" ? "text-success" : "text-danger";
+                        <tr>
+                            <td><strong>@rule.Name</strong></td>
+                            <td>@rule.Priority</td>
+                            <td>@rule.Direction</td>
+                            <td class="@accessClass"><strong>@rule.Access</strong></td>
+                            <td>@rule.Protocol</td>
+                            <td>@rule.DestinationPortRange</td>
+                            <td class="small text-secondary" style="max-width:200px;word-break:break-all;">@rule.SourceAddressPrefixes</td>
+                            <td class="small text-secondary">@rule.Description</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">Nessuna regola trovata nell'NSG <strong>@Model.NsgName</strong>.</div>
+    }
+}

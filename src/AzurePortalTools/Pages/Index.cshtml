@@ -1,0 +1,33 @@
+﻿@page
+@model AzurePortalTools.Pages.IndexModel
+@{
+    ViewData["Title"] = "Seleziona Tenant";
+}
+
+<h2 class="mb-4">&#127760; Seleziona Tenant / Subscription</h2>
+
+@if (!Model.Tenants.Any())
+{
+    <div class="alert alert-warning">Nessun tenant configurato in <code>appsettings.json</code>.</div>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        @foreach (var t in Model.Tenants)
+        {
+            <div class="col">
+                <div class="card h-100 bg-dark border-secondary">
+                    <div class="card-body">
+                        <h5 class="card-title text-info">@t.DisplayName</h5>
+                        <p class="card-text text-secondary small mb-1">Tenant: <code>@t.TenantId</code></p>
+                        <p class="card-text text-secondary small">Sub: <code>@t.SubscriptionId</code></p>
+                    </div>
+                    <div class="card-footer d-flex gap-2">
+                        <a href="/Vms?tenantId=@t.TenantId" class="btn btn-sm btn-primary w-100">&#128187; Gestisci VM</a>
+                        <a href="/Nsg?tenantId=@t.TenantId" class="btn btn-sm btn-outline-warning w-100">&#128737; NSG Rules</a>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}

@@ -1,0 +1,94 @@
+@page
+@model AzurePortalTools.Pages.VmsModel
+@{
+    ViewData["Title"] = "Gestione VM";
+}
+
+<h2 class="mb-1">&#128187; Virtual Machines</h2>
+<p class="text-secondary mb-4">Tenant: <strong class="text-info">@Model.SelectedTenant?.DisplayName</strong></p>
+
+@if (!string.IsNullOrEmpty(Model.Message))
+{
+    <div class="alert @Model.MessageClass alert-dismissible fade show" role="alert">
+        @Model.Message
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Resource Group selector -->
+<form method="get" class="row g-2 mb-4">
+    <input type="hidden" name="tenantId" value="@Model.TenantId" />
+    <div class="col-auto">
+        <select name="resourceGroup" class="form-select bg-dark text-light border-secondary" onchange="this.form.submit()">
+            <option value="">-- Seleziona Resource Group --</option>
+            @foreach (var rg in Model.ResourceGroups)
+            {
+                @if (rg == Model.ResourceGroup)
+                {
+                    <option value="@rg" selected>@rg</option>
+                }
+                else
+                {
+                    <option value="@rg">@rg</option>
+                }
+            }
+        </select>
+    </div>
+    <div class="col-auto">
+        <a href="/Index" class="btn btn-outline-secondary">&#8592; Torna ai Tenant</a>
+    </div>
+</form>
+
+@if (!string.IsNullOrEmpty(Model.ResourceGroup) && Model.Vms.Any())
+{
+    <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle">
+            <thead class="table-secondary">
+                <tr>
+                    <th>Nome VM</th>
+                    <th>Location</th>
+                    <th>Stato</th>
+                    <th class="text-center">Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var vm in Model.Vms)
+                {
+                    var stateClass = vm.PowerState == "running" ? "text-success" :
+                                     vm.PowerState == "deallocated" ? "text-danger" : "text-warning";
+                    var stateIcon = vm.PowerState == "running" ? "🟢" :
+                                    vm.PowerState == "deallocated" ? "🔴" : "🟡";
+                    <tr>
+                        <td><strong>@vm.Name</strong></td>
+                        <td class="text-secondary">@vm.Location</td>
+                        <td class="@stateClass">@stateIcon @vm.PowerState</td>
+                        <td class="text-center">
+                            <form method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="tenantId" value="@Model.TenantId" />
+                                <input type="hidden" name="resourceGroup" value="@Model.ResourceGroup" />
+                                <input type="hidden" name="vmName" value="@vm.Name" />
+                                <button asp-page-handler="Start"
+                                        class="btn btn-sm btn-success me-1"
+                                        disabled="@(vm.PowerState == "running")"
+                                        onclick="return confirm('Avviare la VM @vm.Name?')">
+                                    ▶ Avvia
+                                </button>
+                                <button asp-page-handler="Stop"
+                                        class="btn btn-sm btn-danger"
+                                        disabled="@(vm.PowerState == "deallocated")"
+                                        onclick="return confirm('Fermare la VM @vm.Name?')">
+                                    ■ Ferma
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else if (!string.IsNullOrEmpty(Model.ResourceGroup))
+{
+    <div class="alert alert-info">Nessuna VM trovata nel resource group <strong>@Model.ResourceGroup</strong>.</div>
+}
