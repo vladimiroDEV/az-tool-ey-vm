@@ -157,77 +157,122 @@ public class AzureService
             var rg = await subscription.GetResourceGroups().GetAsync(request.ResourceGroup);
             var nsgResource = await rg.Value.GetNetworkSecurityGroups().GetAsync(request.NsgName);
 
-            // Determine rule parameters by protocol
-            string ruleName, port, description;
-            int priority;
-            if (request.Protocol == "MSSQL")
-            {
-                ruleName = "AllowMSSQLInbound";
-                port = "1433";
-                description = "Allow MSSQL from multiple IPs";
-                priority = 110;
-            }
-            else // RDP default
-            {
-                ruleName = "AllowRDPInbound";
-                port = "3389";
-                description = "Allow RDP from multiple IPs";
-                priority = 234;
-            }
+            var results = new List<string>();
 
-            // Check if rule already exists
-            SecurityRuleData? existingRule = null;
-            try
+            foreach (var protocolKey in request.Protocols)
             {
-                var existingRuleResource = await nsgResource.Value.GetSecurityRules().GetAsync(ruleName);
-                existingRule = existingRuleResource.Value.Data;
-            }
-            catch { /* rule does not exist */ }
-
-            var newIpList = new List<string> { request.SourceIp };
-
-            if (existingRule != null)
-            {
-                // Merge IPs
-                var existing = existingRule.SourceAddressPrefixes.ToList();
-                if (!existing.Contains(request.SourceIp))
-                    existing.Add(request.SourceIp);
-                newIpList = existing;
-
-                existingRule.SourceAddressPrefix = null;
-                existingRule.SourceAddressPrefixes.Clear();
-                foreach (var ip in newIpList)
-                    existingRule.SourceAddressPrefixes.Add(ip);
-
-                await nsgResource.Value.GetSecurityRules().CreateOrUpdateAsync(
-                    WaitUntil.Completed, ruleName, existingRule);
-            }
-            else
-            {
-                var ruleData = new SecurityRuleData
+                var preset = NsgRulePreset.All.FirstOrDefault(p => p.Key == protocolKey);
+                if (preset == null)
                 {
-                    Name = ruleName,
-                    Priority = priority,
-                    Direction = SecurityRuleDirection.Inbound,
-                    Access = SecurityRuleAccess.Allow,
-                    Protocol = SecurityRuleProtocol.Tcp,
-                    SourceAddressPrefix = request.SourceIp,
-                    SourcePortRange = "*",
-                    DestinationAddressPrefix = "*",
-                    DestinationPortRange = port,
-                    Description = description
-                };
+                    results.Add($"{protocolKey}: preset sconosciuto");
+                    continue;
+                }
 
-                await nsgResource.Value.GetSecurityRules().CreateOrUpdateAsync(
-                    WaitUntil.Completed, ruleName, ruleData);
+                try
+                {
+                    await ApplySingleRuleAsync(nsgResource.Value, preset, request.SourceIp);
+                    results.Add($"{preset.DisplayName}: ✅");
+                }
+                catch (Exception ex)
+                {
+                    results.Add($"{preset.DisplayName}: ❌ {ex.Message}");
+                }
             }
 
-            return "ok";
+            var hasError = results.Any(r => r.Contains("❌"));
+            return hasError ? string.Join(" | ", results) : "ok|" + string.Join(" | ", results);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding NSG rule");
+            _logger.LogError(ex, "Error adding NSG rules");
             return $"error: {ex.Message}";
         }
+    }
+
+    private async Task ApplySingleRuleAsync(NetworkSecurityGroupResource nsgResource, NsgRulePreset preset, string sourceIp)
+    {
+        // Check if rule already exists
+        SecurityRuleData? existingRule = null;
+        try
+        {
+            var existingRuleResource = await nsgResource.GetSecurityRules().GetAsync(preset.RuleName);
+            existingRule = existingRuleResource.Value.Data;
+        }
+        catch { /* rule does not exist */ }
+
+        if (existingRule != null)
+        {
+            // Merge IPs
+            var existing = existingRule.SourceAddressPrefixes.ToList();
+            if (!string.IsNullOrEmpty(existingRule.SourceAddressPrefix))
+            {
+                if (!existing.Contains(existingRule.SourceAddressPrefix))
+                    existing.Add(existingRule.SourceAddressPrefix);
+            }
+
+            if (!existing.Contains(sourceIp))
+                existing.Add(sourceIp);
+
+            existingRule.SourceAddressPrefix = null;
+            existingRule.SourceAddressPrefixes.Clear();
+            foreach (var ip in existing)
+                existingRule.SourceAddressPrefixes.Add(ip);
+
+            await nsgResource.GetSecurityRules().CreateOrUpdateAsync(
+                WaitUntil.Completed, preset.RuleName, existingRule);
+        }
+        else
+        {
+            var ruleData = new SecurityRuleData
+            {
+                Name = preset.RuleName,
+                Priority = preset.Priority,
+                Direction = SecurityRuleDirection.Inbound,
+                Access = SecurityRuleAccess.Allow,
+                Protocol = SecurityRuleProtocol.Tcp,
+                SourceAddressPrefix = sourceIp,
+                SourcePortRange = "*",
+                DestinationAddressPrefix = "*",
+                DestinationPortRange = preset.Port,
+                Description = preset.Description
+            };
+
+            await nsgResource.GetSecurityRules().CreateOrUpdateAsync(
+                WaitUntil.Completed, preset.RuleName, ruleData);
+        }
+    }
+
+    /// <summary>
+    /// Returns the status of each preset rule in the NSG (exists, IPs, etc.).
+    /// </summary>
+    public async Task<List<NsgRulePresetStatus>> GetPresetStatusAsync(TenantConfig tenant, string resourceGroup, string nsgName, string currentIp)
+    {
+        var rules = await GetNsgRulesAsync(tenant, resourceGroup, nsgName);
+        var statuses = new List<NsgRulePresetStatus>();
+
+        foreach (var preset in NsgRulePreset.All)
+        {
+            var matchingRule = rules.FirstOrDefault(r =>
+                string.Equals(r.Name, preset.RuleName, StringComparison.OrdinalIgnoreCase));
+
+            var currentIps = new List<string>();
+            if (matchingRule != null)
+            {
+                currentIps = matchingRule.SourceAddressPrefixes
+                    .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(ip => ip.Trim())
+                    .ToList();
+            }
+
+            statuses.Add(new NsgRulePresetStatus
+            {
+                Preset = preset,
+                Exists = matchingRule != null,
+                IpAlreadyPresent = currentIps.Contains(currentIp),
+                CurrentIps = currentIps
+            });
+        }
+
+        return statuses;
     }
 }

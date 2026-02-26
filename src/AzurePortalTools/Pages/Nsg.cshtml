@@ -62,40 +62,84 @@
 
 @if (!string.IsNullOrEmpty(Model.NsgName))
 {
-    <!-- Form aggiunta regola -->
-    <div class="card bg-dark border-secondary mb-4">
-        <div class="card-header border-secondary">
-            <h6 class="mb-0 text-warning">&#43; Aggiungi / Aggiorna Regola Inbound</h6>
+    <!-- Quick Apply Card -->
+    <div class="card bg-dark border-warning mb-4">
+        <div class="card-header border-warning d-flex align-items-center">
+            <h6 class="mb-0 text-warning">&#9889; Quick Apply — Aggiungi IP alle regole NSG</h6>
         </div>
         <div class="card-body">
-            <form method="post" asp-page-handler="AddRule" class="row g-3 align-items-end">
+            <form method="post" asp-page-handler="AddRule">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="tenantId" value="@Model.TenantId" />
                 <input type="hidden" name="resourceGroup" value="@Model.ResourceGroup" />
                 <input type="hidden" name="nsgName" value="@Model.NsgName" />
-                <div class="col-md-4">
-                    <label class="form-label text-secondary">IP Sorgente</label>
-                    <div class="input-group">
+
+                <!-- Step 1: IP -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-5">
+                        <label class="form-label text-secondary">
+                            <strong>1.</strong> IP Sorgente
+                        </label>
                         <input type="text" name="SourceIp" class="form-control bg-dark text-light border-secondary"
-                               placeholder="es. 1.2.3.4" value="@Model.PublicIp" required />
-                        <span class="input-group-text bg-secondary text-light border-secondary" title="Tuo IP pubblico rilevato">
-                            &#127760;
-                        </span>
+                               placeholder="es. 1.2.3.4" required />
                     </div>
-                    <div class="form-text text-secondary">IP pubblico rilevato: <strong class="text-info">@Model.PublicIp</strong></div>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label text-secondary">Protocollo</label>
-                    <select name="Protocol" class="form-select bg-dark text-light border-secondary">
-                        <option value="RDP">RDP (porta 3389)</option>
-                        <option value="MSSQL">MS SQL (porta 1433)</option>
-                    </select>
+
+                <!-- Step 2: Checkboxes servizi -->
+                <div class="mb-3">
+                    <label class="form-label text-secondary">
+                        <strong>2.</strong> Seleziona i servizi da abilitare
+                    </label>
+                    <div class="row g-3">
+                        @foreach (var ps in Model.PresetStatuses)
+                        {
+                            var badgeClass = ps.IpAlreadyPresent ? "bg-success" :
+                                             ps.Exists ? "bg-info" : "bg-secondary";
+                            var badgeText = ps.IpAlreadyPresent ? "✅ IP già presente" :
+                                            ps.Exists ? "⚠️ Regola esiste, IP da aggiungere" : "🆕 Regola da creare";
+
+                            <div class="col-md-4">
+                                <div class="card bg-dark border-secondary h-100">
+                                    <div class="card-body p-3">
+                                        <div class="form-check form-switch mb-2">
+                                            @if (ps.IpAlreadyPresent)
+                                            {
+                                                <input class="form-check-input" type="checkbox" name="Protocols"
+                                                       value="@ps.Preset.Key" id="chk-@ps.Preset.Key" disabled />
+                                            }
+                                            else
+                                            {
+                                                <input class="form-check-input" type="checkbox" name="Protocols"
+                                                       value="@ps.Preset.Key" id="chk-@ps.Preset.Key" checked />
+                                            }
+                                            <label class="form-check-label text-light" for="chk-@ps.Preset.Key">
+                                                @ps.Preset.Icon <strong>@ps.Preset.DisplayName</strong>
+                                            </label>
+                                        </div>
+                                        <div class="small">
+                                            <span class="badge @badgeClass">@badgeText</span>
+                                        </div>
+                                        <div class="text-secondary small mt-1">
+                                            Regola: <code>@ps.Preset.RuleName</code><br />
+                                            Porta: <code>@ps.Preset.Port</code> · Priorità: <code>@ps.Preset.Priority</code>
+                                        </div>
+                                        @if (ps.CurrentIps.Any())
+                                        {
+                                            <div class="text-secondary small mt-1">
+                                                IP attuali: @string.Join(", ", ps.CurrentIps)
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
                 </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-warning">
-                        &#128737; Applica Regola
-                    </button>
-                </div>
+
+                <!-- Step 3: Submit -->
+                <button type="submit" class="btn btn-warning btn-lg">
+                    &#128640; Applica Regole Selezionate
+                </button>
             </form>
         </div>
     </div>
