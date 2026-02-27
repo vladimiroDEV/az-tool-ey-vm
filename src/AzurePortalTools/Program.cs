@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 var builder = WebApplication.CreateBuilder(args);
 
 // Bind configuration
-builder.Services.Configure<AppAuthConfig>(builder.Configuration.GetSection("AppAuth"));
+builder.Services.Configure<List<AppUserConfig>>(builder.Configuration.GetSection("AppUsers"));
 builder.Services.Configure<List<TenantConfig>>(builder.Configuration.GetSection("AzureTenants"));
 
 // Cookie authentication

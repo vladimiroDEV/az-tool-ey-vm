@@ -12,7 +12,7 @@ namespace AzurePortalTools.Pages;
 [AllowAnonymous]
 public class LoginModel : PageModel
 {
-    private readonly AppAuthConfig _auth;
+    private readonly List<AppUserConfig> _users;
 
     [BindProperty]
     public string Username { get; set; } = string.Empty;
@@ -22,25 +22,34 @@ public class LoginModel : PageModel
 
     public string? ErrorMessage { get; set; }
 
-    public LoginModel(IOptions<AppAuthConfig> auth)
+    public LoginModel(IOptions<List<AppUserConfig>> users)
     {
-        _auth = auth.Value;
+        _users = users.Value;
     }
 
     public void OnGet() { }
 
     public async Task<IActionResult> OnPostAsync()
     {
-        if (Username == _auth.Username && Password == _auth.Password)
+        var user = _users.FirstOrDefault(u =>
+            string.Equals(u.Username, Username, StringComparison.OrdinalIgnoreCase)
+            && u.Password == Password);
+
+        if (user != null)
         {
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.Name, Username),
-                new Claim(ClaimTypes.Role, "Admin")
+                new Claim(ClaimTypes.Name, user.Username),
+                new Claim(ClaimTypes.Role, user.Role)
             };
             var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
                 new ClaimsPrincipal(identity));
+
+            // Redirect based on role
+            if (!string.IsNullOrEmpty(user.RedirectPage))
+                return Redirect(user.RedirectPage);
+
             return RedirectToPage("/Index");
         }
 
