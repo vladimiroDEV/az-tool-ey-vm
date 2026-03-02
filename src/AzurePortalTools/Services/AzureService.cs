@@ -191,31 +191,34 @@ public class AzureService
 
     private async Task ApplySingleRuleAsync(NetworkSecurityGroupResource nsgResource, NsgRulePreset preset, string sourceIp)
     {
-        // Check if rule already exists
+        // Look up rule by EXACT name only
         SecurityRuleData? existingRule = null;
         try
         {
-            var existingRuleResource = await nsgResource.GetSecurityRules().GetAsync(preset.RuleName);
-            existingRule = existingRuleResource.Value.Data;
+            var found = await nsgResource.GetSecurityRules().GetAsync(preset.RuleName);
+            existingRule = found.Value.Data;
         }
-        catch { /* rule does not exist */ }
+        catch { /* does not exist yet */ }
 
         if (existingRule != null)
         {
-            // Merge IPs
-            var existing = existingRule.SourceAddressPrefixes.ToList();
+            // Collect all current IPs
+            var existingIps = existingRule.SourceAddressPrefixes.ToList();
             if (!string.IsNullOrEmpty(existingRule.SourceAddressPrefix))
             {
-                if (!existing.Contains(existingRule.SourceAddressPrefix))
-                    existing.Add(existingRule.SourceAddressPrefix);
+                if (!existingIps.Contains(existingRule.SourceAddressPrefix))
+                    existingIps.Add(existingRule.SourceAddressPrefix);
             }
 
-            if (!existing.Contains(sourceIp))
-                existing.Add(sourceIp);
+            // IP already present — nothing to do
+            if (existingIps.Contains(sourceIp))
+                return;
+
+            existingIps.Add(sourceIp);
 
             existingRule.SourceAddressPrefix = null;
             existingRule.SourceAddressPrefixes.Clear();
-            foreach (var ip in existing)
+            foreach (var ip in existingIps)
                 existingRule.SourceAddressPrefixes.Add(ip);
 
             await nsgResource.GetSecurityRules().CreateOrUpdateAsync(
@@ -223,10 +226,23 @@ public class AzureService
         }
         else
         {
+            // Collect all priorities already in use (Inbound) to avoid conflicts
+            var usedPriorities = new HashSet<int>();
+            await foreach (var rule in nsgResource.GetSecurityRules().GetAllAsync())
+            {
+                if (rule.Data.Direction == SecurityRuleDirection.Inbound)
+                    usedPriorities.Add(rule.Data.Priority ?? 0);
+            }
+
+            // Use preset priority if free, otherwise find next free slot starting from it
+            int priority = preset.Priority;
+            while (usedPriorities.Contains(priority))
+                priority++;
+
             var ruleData = new SecurityRuleData
             {
                 Name = preset.RuleName,
-                Priority = preset.Priority,
+                Priority = priority,
                 Direction = SecurityRuleDirection.Inbound,
                 Access = SecurityRuleAccess.Allow,
                 Protocol = SecurityRuleProtocol.Tcp,
@@ -252,6 +268,7 @@ public class AzureService
 
         foreach (var preset in NsgRulePreset.All)
         {
+            // Match by EXACT rule name
             var matchingRule = rules.FirstOrDefault(r =>
                 string.Equals(r.Name, preset.RuleName, StringComparison.OrdinalIgnoreCase));
 
@@ -268,7 +285,8 @@ public class AzureService
             {
                 Preset = preset,
                 Exists = matchingRule != null,
-                IpAlreadyPresent = currentIps.Contains(currentIp),
+                ExistingRuleName = matchingRule?.Name,
+                IpAlreadyPresent = !string.IsNullOrEmpty(currentIp) && currentIps.Contains(currentIp),
                 CurrentIps = currentIps
             });
         }

@@ -120,8 +120,15 @@
                                             <span class="badge @badgeClass">@badgeText</span>
                                         </div>
                                         <div class="text-secondary small mt-1">
-                                            Regola: <code>@ps.Preset.RuleName</code><br />
-                                            Porta: <code>@ps.Preset.Port</code> · Priorità: <code>@ps.Preset.Priority</code>
+                                            @if (!string.IsNullOrEmpty(ps.ExistingRuleName))
+                                            {
+                                                <span>Regola: <code>@ps.ExistingRuleName</code></span>
+                                            }
+                                            else
+                                            {
+                                                <span>Regola: <code>@ps.Preset.RuleName</code> <em>(nuova)</em></span>
+                                            }
+                                            <br />Porta: <code>@ps.Preset.Port</code> · Priorità: <code>@ps.Preset.Priority</code>
                                         </div>
                                         @if (ps.CurrentIps.Any())
                                         {

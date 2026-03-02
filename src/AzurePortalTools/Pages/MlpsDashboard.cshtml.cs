@@ -32,6 +32,11 @@ public class MlpsDashboardModel : PageModel
     public string? Message { get; set; }
     public string? MessageClass { get; set; }
 
+    [TempData]
+    public string? ToastMessage { get; set; }
+    [TempData]
+    public string? ToastClass { get; set; }
+
     public MlpsDashboardModel(AzureService azure, IOptions<List<TenantConfig>> tenants, IOptions<List<AppUserConfig>> users)
     {
         _azure = azure;
@@ -104,8 +109,8 @@ public class MlpsDashboardModel : PageModel
 
         if (Protocols == null || !Protocols.Any())
         {
-            Message = "Seleziona almeno un servizio.";
-            MessageClass = "alert-warning";
+            TempData["ToastMessage"] = "Seleziona almeno un servizio.";
+            TempData["ToastClass"] = "bg-warning text-dark";
         }
         else
         {
@@ -120,19 +125,17 @@ public class MlpsDashboardModel : PageModel
             var result = await _azure.AddOrUpdateNsgRuleAsync(Tenant!, request);
             if (result.StartsWith("ok|"))
             {
-                var details = result.Substring(3);
-                Message = $"Regole applicate con IP {SourceIp}: {details}";
-                MessageClass = "alert-success";
+                TempData["ToastMessage"] = $"✅ Regole applicate con IP {SourceIp}";
+                TempData["ToastClass"] = "bg-success";
             }
             else
             {
-                Message = $"Errore: {result}";
-                MessageClass = "alert-danger";
+                TempData["ToastMessage"] = $"❌ Errore: {result}";
+                TempData["ToastClass"] = "bg-danger";
             }
         }
 
-        await LoadDataAsync();
-        return Page();
+        return RedirectToPage();
     }
 
     private async Task LoadDataAsync()
@@ -147,19 +150,5 @@ public class MlpsDashboardModel : PageModel
                 string.Equals(v.Name, UserConfig.VmName, StringComparison.OrdinalIgnoreCase));
         }
         catch { /* VM not found */ }
-
-        // Load NSG rules & preset statuses
-        try
-        {
-            NsgRules = await _azure.GetNsgRulesAsync(Tenant, UserConfig.ResourceGroup!, UserConfig.NsgName!);
-            PresetStatuses = await _azure.GetPresetStatusAsync(Tenant, UserConfig.ResourceGroup!, UserConfig.NsgName!,
-                string.IsNullOrEmpty(SourceIp) ? string.Empty : SourceIp);
-
-            // Filter to only allowed protocols
-            PresetStatuses = PresetStatuses
-                .Where(ps => UserConfig.AllowedProtocols.Contains(ps.Preset.Key))
-                .ToList();
-        }
-        catch { /* NSG not found */ }
     }
 }

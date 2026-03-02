@@ -44,8 +44,9 @@ public class NsgRulePreset
     /// <summary>All available presets.</summary>
     public static List<NsgRulePreset> All => new()
     {
-        new() { Key = "RDP",   DisplayName = "RDP (3389)",     RuleName = "AllowRDPInbound",   Port = "3389", Priority = 234, Description = "Allow RDP from specific IPs",   Icon = "🖥️" },
-        new() { Key = "MSSQL", DisplayName = "MS SQL (1433)",  RuleName = "AllowMSSQLInbound", Port = "1433", Priority = 110, Description = "Allow MSSQL from specific IPs", Icon = "🗄️" },
+        new() { Key = "RDP",    DisplayName = "RDP (3389)",    RuleName = "Allow_RDP_Inbound",    Port = "3389", Priority = 234, Description = "Allow RDP from specific IPs",    Icon = "🖥️" },
+        new() { Key = "MSSQL",  DisplayName = "MS SQL (1433)", RuleName = "Allow_MSSQL_Inbound",  Port = "1433", Priority = 110, Description = "Allow MSSQL from specific IPs",  Icon = "🗄️" },
+        new() { Key = "DENODO", DisplayName = "Denodo (9999)", RuleName = "Allow_DENODO_Inbound", Port = "9999", Priority = 120, Description = "Allow Denodo from specific IPs", Icon = "🔷" },
     };
 }
 
@@ -56,6 +57,7 @@ public class NsgRulePresetStatus
 {
     public NsgRulePreset Preset { get; set; } = new();
     public bool Exists { get; set; }
+    public string? ExistingRuleName { get; set; }
     public bool IpAlreadyPresent { get; set; }
     public List<string> CurrentIps { get; set; } = new();
 }
