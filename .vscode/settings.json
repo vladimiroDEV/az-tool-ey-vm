@@ -1,0 +1,4 @@
+{
+    "appService.defaultWebAppToDeploy": "/subscriptions/833d8542-cdc2-4468-bdb7-e34e3e0e71b5/resourceGroups/MLPSDEV/providers/Microsoft.Web/sites/aztool",
+    "appService.deploySubpath": "src/AzurePortalTools/publish"
+}
