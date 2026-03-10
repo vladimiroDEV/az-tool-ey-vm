@@ -44,9 +44,10 @@ public class NsgRulePreset
     /// <summary>All available presets.</summary>
     public static List<NsgRulePreset> All => new()
     {
-        new() { Key = "RDP",    DisplayName = "RDP (3389)",    RuleName = "Allow_RDP_Inbound",    Port = "3389", Priority = 234, Description = "Allow RDP from specific IPs",    Icon = "🖥️" },
-        new() { Key = "MSSQL",  DisplayName = "MS SQL (1433)", RuleName = "Allow_MSSQL_Inbound",  Port = "1433", Priority = 110, Description = "Allow MSSQL from specific IPs",  Icon = "🗄️" },
-        new() { Key = "DENODO", DisplayName = "Denodo (9999)", RuleName = "Allow_DENODO_Inbound", Port = "9999", Priority = 120, Description = "Allow Denodo from specific IPs", Icon = "🔷" },
+        new() { Key = "RDP",      DisplayName = "RDP (3389)",        RuleName = "Allow_RDP_Inbound",      Port = "3389", Priority = 234, Description = "Allow RDP from specific IPs",      Icon = "🖥️" },
+        new() { Key = "MSSQL",    DisplayName = "MS SQL (1433)",     RuleName = "Allow_MSSQL_Inbound",    Port = "1433", Priority = 110, Description = "Allow MSSQL from specific IPs",    Icon = "🗄️" },
+        new() { Key = "DENODO",   DisplayName = "Denodo (9999)",     RuleName = "Allow_DENODO_Inbound",   Port = "9999", Priority = 120, Description = "Allow Denodo from specific IPs",   Icon = "🔷" },
+        new() { Key = "RABBITMQ", DisplayName = "RabbitMQ (5672)",   RuleName = "Allow_RABBITMQ_Inbound", Port = "5672", Priority = 130, Description = "Allow RabbitMQ AMQP from specific IPs", Icon = "🐇" },
     };
 }
 
