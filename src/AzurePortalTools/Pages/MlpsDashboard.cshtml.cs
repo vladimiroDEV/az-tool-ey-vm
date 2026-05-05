@@ -16,12 +16,15 @@ public class MlpsDashboardModel : PageModel
     public AppUserConfig? UserConfig { get; private set; }
     public TenantConfig? Tenant { get; private set; }
 
-    // VM state
-    public VmInfo? Vm { get; set; }
+    // VM states: key = VmName
+    public Dictionary<string, VmInfo?> VmStates { get; set; } = new();
 
     // NSG preset statuses
     public List<NsgRulePresetStatus> PresetStatuses { get; set; } = new();
     public List<NsgRuleInfo> NsgRules { get; set; } = new();
+
+    [BindProperty]
+    public string TargetVmName { get; set; } = string.Empty;
 
     [BindProperty]
     public string SourceIp { get; set; } = string.Empty;
@@ -56,6 +59,10 @@ public class MlpsDashboardModel : PageModel
         return Tenant != null;
     }
 
+    private VmConfig? GetTargetVmConfig() =>
+        UserConfig?.GetVmConfigs().FirstOrDefault(v =>
+            string.Equals(v.VmName, TargetVmName, StringComparison.OrdinalIgnoreCase));
+
     public async Task<IActionResult> OnGetAsync()
     {
         if (!LoadConfig()) return RedirectToPage("/Index");
@@ -67,47 +74,32 @@ public class MlpsDashboardModel : PageModel
     {
         if (!LoadConfig()) return RedirectToPage("/Index");
 
-        var result = await _azure.StartVmAsync(Tenant!, UserConfig!.ResourceGroup!, UserConfig.VmName!);
-        if (result == "started")
-        {
-            Message = $"VM {UserConfig.VmName} avviata con successo.";
-            MessageClass = "alert-success";
-        }
-        else
-        {
-            Message = $"Errore avvio: {result}";
-            MessageClass = "alert-danger";
-        }
-
-        await LoadDataAsync();
-        return Page();
+        var result = await _azure.StartVmAsync(Tenant!, UserConfig!.ResourceGroup!, TargetVmName);
+        TempData["ToastMessage"] = result == "started"
+            ? $"✅ VM {TargetVmName} avviata con successo."
+            : $"❌ Errore avvio {TargetVmName}: {result}";
+        TempData["ToastClass"] = result == "started" ? "bg-success" : "bg-danger";
+        return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostStopVmAsync()
     {
         if (!LoadConfig()) return RedirectToPage("/Index");
 
-        var result = await _azure.StopVmAsync(Tenant!, UserConfig!.ResourceGroup!, UserConfig.VmName!);
-        if (result == "deallocated")
-        {
-            Message = $"VM {UserConfig.VmName} fermata (deallocated).";
-            MessageClass = "alert-success";
-        }
-        else
-        {
-            Message = $"Errore stop: {result}";
-            MessageClass = "alert-danger";
-        }
-
-        await LoadDataAsync();
-        return Page();
+        var result = await _azure.StopVmAsync(Tenant!, UserConfig!.ResourceGroup!, TargetVmName);
+        TempData["ToastMessage"] = result == "deallocated"
+            ? $"✅ VM {TargetVmName} fermata (deallocated)."
+            : $"❌ Errore stop {TargetVmName}: {result}";
+        TempData["ToastClass"] = result == "deallocated" ? "bg-success" : "bg-danger";
+        return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostApplyRulesAsync()
     {
         if (!LoadConfig()) return RedirectToPage("/Index");
 
-        if (Protocols == null || !Protocols.Any())
+        var vmCfg = GetTargetVmConfig();
+        if (vmCfg == null || Protocols == null || !Protocols.Any())
         {
             TempData["ToastMessage"] = "Seleziona almeno un servizio.";
             TempData["ToastClass"] = "bg-warning text-dark";
@@ -117,22 +109,16 @@ public class MlpsDashboardModel : PageModel
             var request = new AddNsgRuleRequest
             {
                 ResourceGroup = UserConfig!.ResourceGroup!,
-                NsgName = UserConfig.NsgName!,
+                NsgName = vmCfg.NsgName,
                 SourceIp = SourceIp,
                 Protocols = Protocols
             };
 
             var result = await _azure.AddOrUpdateNsgRuleAsync(Tenant!, request);
-            if (result.StartsWith("ok|"))
-            {
-                TempData["ToastMessage"] = $"✅ Regole applicate con IP {SourceIp}";
-                TempData["ToastClass"] = "bg-success";
-            }
-            else
-            {
-                TempData["ToastMessage"] = $"❌ Errore: {result}";
-                TempData["ToastClass"] = "bg-danger";
-            }
+            TempData["ToastMessage"] = result.StartsWith("ok|")
+                ? $"✅ Regole applicate su {TargetVmName} con IP {SourceIp}"
+                : $"❌ Errore: {result}";
+            TempData["ToastClass"] = result.StartsWith("ok|") ? "bg-success" : "bg-danger";
         }
 
         return RedirectToPage();
@@ -142,13 +128,15 @@ public class MlpsDashboardModel : PageModel
     {
         if (Tenant == null || UserConfig == null) return;
 
-        // Load VM status
         try
         {
             var vms = await _azure.GetVmsInResourceGroupAsync(Tenant, UserConfig.ResourceGroup!);
-            Vm = vms.FirstOrDefault(v =>
-                string.Equals(v.Name, UserConfig.VmName, StringComparison.OrdinalIgnoreCase));
+            foreach (var vmCfg in UserConfig.GetVmConfigs())
+            {
+                VmStates[vmCfg.VmName] = vms.FirstOrDefault(v =>
+                    string.Equals(v.Name, vmCfg.VmName, StringComparison.OrdinalIgnoreCase));
+            }
         }
-        catch { /* VM not found */ }
+        catch { /* VMs not found */ }
     }
 }

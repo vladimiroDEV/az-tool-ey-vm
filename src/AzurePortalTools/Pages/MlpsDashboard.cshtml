@@ -2,9 +2,7 @@
 @model AzurePortalTools.Pages.MlpsDashboardModel
 @{
     ViewData["Title"] = "Dashboard";
-    var allowedPresets = AzurePortalTools.Models.NsgRulePreset.All
-        .Where(p => (Model.UserConfig?.AllowedProtocols ?? new()).Contains(p.Key))
-        .ToList();
+    var vmConfigs = Model.UserConfig?.GetVmConfigs() ?? new();
 }
 
 <!-- Toast -->
@@ -41,125 +39,108 @@
     </div>
 }
 
-<!-- ══════ SEZIONE 1: VM ══════ -->
-<div class="card bg-dark border-secondary mb-4">
-    <div class="card-header border-secondary">
-        <h5 class="mb-0">&#128187; Virtual Machine: <strong class="text-info">@Model.UserConfig?.VmName</strong></h5>
-    </div>
-    <div class="card-body">
-        @if (Model.Vm != null)
-        {
-            var stateClass = Model.Vm.PowerState == "running" ? "text-success" :
-                             Model.Vm.PowerState == "deallocated" ? "text-danger" : "text-warning";
-            var stateIcon = Model.Vm.PowerState == "running" ? "🟢" :
-                            Model.Vm.PowerState == "deallocated" ? "🔴" : "🟡";
-            var isRunning = Model.Vm.PowerState == "running";
-            var isStopped = Model.Vm.PowerState == "deallocated";
+@foreach (var vmCfg in vmConfigs)
+{
+    var vm = Model.VmStates.TryGetValue(vmCfg.VmName, out var v) ? v : null;
+    var allowedPresets = AzurePortalTools.Models.NsgRulePreset.All
+        .Where(p => vmCfg.AllowedProtocols.Contains(p.Key))
+        .ToList();
 
-            <div class="d-flex align-items-center gap-4">
-                <div>
-                    <span class="fs-4 @stateClass">@stateIcon <strong>@Model.Vm.PowerState</strong></span>
-                    <div class="text-secondary small mt-1">Location: @Model.Vm.Location</div>
-                </div>
-                <div class="d-flex gap-2 ms-auto">
-                    <form method="post" asp-page-handler="StartVm" class="d-inline">
-                        @Html.AntiForgeryToken()
-                        @if (isRunning)
-                        {
-                            <button type="submit" class="btn btn-success btn-lg" disabled
-                                    onclick="return confirm('Avviare la VM?')">
+    <!-- ══════ SEZIONE VM ══════ -->
+    <div class="card bg-dark border-secondary mb-4">
+        <div class="card-header border-secondary">
+            <h5 class="mb-0">&#128187; Virtual Machine: <strong class="text-info">@vmCfg.VmName</strong></h5>
+        </div>
+        <div class="card-body">
+            @if (vm != null)
+            {
+                var stateClass = vm.PowerState == "running" ? "text-success" :
+                                 vm.PowerState == "deallocated" ? "text-danger" : "text-warning";
+                var stateIcon = vm.PowerState == "running" ? "🟢" :
+                                vm.PowerState == "deallocated" ? "🔴" : "🟡";
+                var isRunning = vm.PowerState == "running";
+                var isStopped = vm.PowerState == "deallocated";
+
+                <div class="d-flex align-items-center gap-4">
+                    <div>
+                        <span class="fs-4 @stateClass">@stateIcon <strong>@vm.PowerState</strong></span>
+                        <div class="text-secondary small mt-1">Location: @vm.Location</div>
+                    </div>
+                    <div class="d-flex gap-2 ms-auto">
+                        <form method="post" asp-page-handler="StartVm" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="TargetVmName" value="@vmCfg.VmName" />
+                            <button type="submit" class="btn btn-success btn-lg" @(isRunning ? "disabled" : "")
+                                    onclick="return confirm('Avviare @vmCfg.VmName?')">
                                 ▶ Avvia VM
                             </button>
-                        }
-                        else
-                        {
-                            <button type="submit" class="btn btn-success btn-lg"
-                                    onclick="return confirm('Avviare la VM?')">
-                                ▶ Avvia VM
-                            </button>
-                        }
-                    </form>
-                    <form method="post" asp-page-handler="StopVm" class="d-inline">
-                        @Html.AntiForgeryToken()
-                        @if (isStopped)
-                        {
-                            <button type="submit" class="btn btn-danger btn-lg" disabled
-                                    onclick="return confirm('Fermare e deallocare la VM?')">
+                        </form>
+                        <form method="post" asp-page-handler="StopVm" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="TargetVmName" value="@vmCfg.VmName" />
+                            <button type="submit" class="btn btn-danger btn-lg" @(isStopped ? "disabled" : "")
+                                    onclick="return confirm('Fermare e deallocare @vmCfg.VmName?')">
                                 ■ Ferma VM
                             </button>
-                        }
-                        else
+                        </form>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-warning mb-0">VM <strong>@vmCfg.VmName</strong> non trovata.</div>
+            }
+        </div>
+    </div>
+
+    <!-- ══════ SEZIONE NSG ══════ -->
+    <div class="card bg-dark border-warning mb-5">
+        <div class="card-header border-warning">
+            <h5 class="mb-0 text-warning">&#9889; NSG Quick Apply — <strong class="text-info">@vmCfg.NsgName</strong></h5>
+        </div>
+        <div class="card-body">
+            <form method="post" asp-page-handler="ApplyRules">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="TargetVmName" value="@vmCfg.VmName" />
+
+                <!-- IP -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-5">
+                        <label class="form-label text-secondary"><strong>1.</strong> IP Sorgente</label>
+                        <input type="text" name="SourceIp" class="form-control bg-dark text-light border-secondary"
+                               placeholder="es. 1.2.3.4" required />
+                    </div>
+                </div>
+
+                <!-- Checkboxes servizi -->
+                <div class="mb-3">
+                    <label class="form-label text-secondary"><strong>2.</strong> Seleziona i servizi da abilitare</label>
+                    <div class="row g-3">
+                        @foreach (var p in allowedPresets)
                         {
-                            <button type="submit" class="btn btn-danger btn-lg"
-                                    onclick="return confirm('Fermare e deallocare la VM?')">
-                                ■ Ferma VM
-                            </button>
-                        }
-                    </form>
-                </div>
-            </div>
-        }
-        else
-        {
-            <div class="alert alert-warning mb-0">VM <strong>@Model.UserConfig?.VmName</strong> non trovata.</div>
-        }
-    </div>
-</div>
-
-<!-- ══════ SEZIONE 2: NSG Quick Apply ══════ -->
-<div class="card bg-dark border-warning mb-4">
-    <div class="card-header border-warning">
-        <h5 class="mb-0 text-warning">&#9889; NSG Quick Apply — <strong class="text-info">@Model.UserConfig?.NsgName</strong></h5>
-    </div>
-    <div class="card-body">
-        <form method="post" asp-page-handler="ApplyRules">
-            @Html.AntiForgeryToken()
-
-            <!-- IP -->
-            <div class="row g-3 mb-3">
-                <div class="col-md-5">
-                    <label class="form-label text-secondary"><strong>1.</strong> IP Sorgente</label>
-                    <input type="text" name="SourceIp" id="sourceIp" class="form-control bg-dark text-light border-secondary"
-                           placeholder="es. 1.2.3.4" required />
-                </div>
-            </div>
-
-            <!-- Checkboxes servizi — sempre abilitati, sempre ri-selezionabili -->
-            <div class="mb-3">
-                <label class="form-label text-secondary"><strong>2.</strong> Seleziona i servizi da abilitare</label>
-                <div class="row g-3">
-                    @foreach (var p in allowedPresets)
-                    {
-                        var isChecked = p.Key != "DENODO";
-                        <div class="col-md-4">
-                            <div class="card bg-dark border-secondary h-100">
-                                <div class="card-body p-3 d-flex align-items-center gap-3">
-                                    <div class="form-check form-switch mb-0">
-                                        @if (isChecked)
-                                        {
+                            var isChecked = p.Key != "DENODO";
+                            <div class="col-md-4">
+                                <div class="card bg-dark border-secondary h-100">
+                                    <div class="card-body p-3 d-flex align-items-center gap-3">
+                                        <div class="form-check form-switch mb-0">
                                             <input class="form-check-input" type="checkbox" name="Protocols"
-                                                   value="@p.Key" id="chk-@p.Key" checked />
-                                        }
-                                        else
-                                        {
-                                            <input class="form-check-input" type="checkbox" name="Protocols"
-                                                   value="@p.Key" id="chk-@p.Key" />
-                                        }
+                                                   value="@p.Key" id="chk-@vmCfg.VmName-@p.Key" @(isChecked ? "checked" : "") />
+                                        </div>
+                                        <label class="form-check-label text-light mb-0" for="chk-@vmCfg.VmName-@p.Key">
+                                            @p.Icon <strong>@p.DisplayName</strong>
+                                            <div class="text-secondary small">@p.RuleName · porta @p.Port</div>
+                                        </label>
                                     </div>
-                                    <label class="form-check-label text-light mb-0" for="chk-@p.Key">
-                                        @p.Icon <strong>@p.DisplayName</strong>
-                                        <div class="text-secondary small">@p.RuleName · porta @p.Port</div>
-                                    </label>
                                 </div>
                             </div>
-                        </div>
-                    }
+                        }
+                    </div>
                 </div>
-            </div>
 
-            <button type="submit" class="btn btn-warning btn-lg">
-                &#128640; Applica Regole Selezionate
-            </button>
-        </form>
+                <button type="submit" class="btn btn-warning btn-lg">
+                    &#128640; Applica Regole Selezionate
+                </button>
+            </form>
+        </div>
     </div>
-</div>
+}

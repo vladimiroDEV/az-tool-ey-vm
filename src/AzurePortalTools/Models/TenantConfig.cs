@@ -15,6 +15,13 @@ public class AppAuthConfig
     public string Password { get; set; } = string.Empty;
 }
 
+public class VmConfig
+{
+    public string VmName { get; set; } = string.Empty;
+    public string NsgName { get; set; } = string.Empty;
+    public List<string> AllowedProtocols { get; set; } = new();
+}
+
 public class AppUserConfig
 {
     public string Username { get; set; } = string.Empty;
@@ -25,7 +32,21 @@ public class AppUserConfig
     // Fixed resources for Operator users
     public string? TenantDisplayName { get; set; }
     public string? ResourceGroup { get; set; }
+
+    // New: list of VMs (preferred format)
+    public List<VmConfig> Vms { get; set; } = new();
+
+    // Legacy single-VM fields (kept for backward compatibility)
     public string? VmName { get; set; }
     public string? NsgName { get; set; }
     public List<string> AllowedProtocols { get; set; } = new();
+
+    /// <summary>Returns the effective list of VM configs, supporting both old and new format.</summary>
+    public List<VmConfig> GetVmConfigs()
+    {
+        if (Vms.Any()) return Vms;
+        if (!string.IsNullOrEmpty(VmName))
+            return new() { new() { VmName = VmName, NsgName = NsgName ?? "", AllowedProtocols = AllowedProtocols } };
+        return new();
+    }
 }
